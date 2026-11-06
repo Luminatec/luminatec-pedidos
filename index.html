@@ -531,6 +531,7 @@ function renderNota(){
     <tbody>${rows}</tbody></table>
     <div class="totbar"><span class="tt">${t.items} ítem(s) · ${t.u} unidades</span><span class="tv">${t.amount>0?money(t.amount):'—'}</span></div>
     ${t.missing?`<div class="warn">${t.missing} ítem(s) sin precio. El total es parcial.</div>`:''}
+    <div class="rowbtns"><button class="btn sec" id="backBtn">← Volver a editar</button></div>
     <div class="rowbtns">
       <button class="btn" id="copyBtn">Copiar nota</button>
       <button class="btn sec" id="mailBtn" title="Próxima fase: requiere servidor">✉ Enviar por mail</button>
@@ -543,6 +544,7 @@ function renderNota(){
   document.getElementById('mailBtn').onclick=()=>alert('Próxima fase: envío automático por mail a las personas que definas (requiere servidor).');
   document.getElementById('odooBtn').onclick=()=>alert('Próxima fase: creación del pedido como presupuesto borrador en Odoo para aprobación (requiere conexión).');
   document.getElementById('newBtn').onclick=()=>{ST.cart={};save();closeModal('notaModal');updateCartBar();renderCat();};
+  document.getElementById('backBtn').onclick=()=>{closeModal('notaModal');openCart();};
 }
 function copyNota(num){
   const t=totals();let txt=`PEDIDO ${num}\nVendedor: ${ST.vendor}\nCliente: ${ST.client?ST.client.name.trim():''}${ST.client&&ST.client.vat?(' (CUIT '+ST.client.vat+')'):''}\n\n`;
