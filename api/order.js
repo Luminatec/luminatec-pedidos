@@ -48,6 +48,7 @@ export default async function handler(req, res) {
 
     const claims = verifyToken(token, process.env.APP_SECRET);
     if (!claims) { res.status(401).json({ ok: false, error: "Sesión inválida o vencida — volvé a entrar" }); return; }
+    if (claims.mc) { res.status(403).json({ ok: false, error: "Tenés que cambiar tu contraseña antes de cargar pedidos." }); return; }
     if (!client?.id || !items.length) { res.status(400).json({ ok: false, error: "Pedido vacío o sin cliente" }); return; }
 
     const result = { ok: true };

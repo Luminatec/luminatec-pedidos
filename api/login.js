@@ -1,33 +1,41 @@
-// POST /api/login  { vendorId, vendorName, password }  -> { ok, token }
+// POST /api/login
+//   body: { vendorId, vendorName, password }  (vendedor, por id de cartera)
+//      o: { email, password }                 (administrador, por email)
+//   -> { ok, token, mustChange, role, name, vid }
 import { signToken, readBody } from "./_lib.js";
+import { ensureSchema, getUserById, getUserByEmail } from "./_db.js";
+import bcrypt from "bcryptjs";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ ok: false, error: "Método no permitido" }); return; }
   try {
-    const { vendorId, vendorName, password } = await readBody(req);
-    if (!vendorId || !password) { res.status(400).json({ ok: false, error: "Faltan datos" }); return; }
-
     const secret = process.env.APP_SECRET;
     if (!secret) { res.status(500).json({ ok: false, error: "Falta configurar APP_SECRET" }); return; }
 
-    // Contraseñas por vendedor: env VENDOR_PASSWORDS = JSON { "<vendorId>": "<password>" }
-    // Si no está definido, se usa una única clave de equipo: env TEAM_PASSWORD
-    let ok = false;
-    if (process.env.VENDOR_PASSWORDS) {
-      let map = {};
-      try { map = JSON.parse(process.env.VENDOR_PASSWORDS); } catch { map = {}; }
-      ok = map[String(vendorId)] != null && String(map[String(vendorId)]) === String(password);
-    } else if (process.env.TEAM_PASSWORD) {
-      ok = String(process.env.TEAM_PASSWORD) === String(password);
-    } else {
-      res.status(500).json({ ok: false, error: "Falta configurar VENDOR_PASSWORDS o TEAM_PASSWORD" });
-      return;
-    }
+    await ensureSchema();
+    const { vendorId, email, password } = await readBody(req);
+    if (!password || (!vendorId && !email)) { res.status(400).json({ ok: false, error: "Faltan datos" }); return; }
 
-    if (!ok) { res.status(401).json({ ok: false, error: "Contraseña incorrecta" }); return; }
+    const user = email
+      ? await getUserByEmail(email)
+      : await getUserById(Number(vendorId));
 
-    const token = signToken({ vid: String(vendorId), vn: vendorName || "" }, secret);
-    res.status(200).json({ ok: true, token });
+    const bad = () => res.status(401).json({ ok: false, error: "Usuario o contraseña incorrectos" });
+    if (!user || !user.active || !user.pass_hash) return bad();
+
+    const ok = await bcrypt.compare(String(password), user.pass_hash);
+    if (!ok) return bad();
+
+    const mc = !!user.must_change;
+    const token = signToken({ uid: Number(user.id), role: user.role, vn: user.name, mc }, secret);
+    res.status(200).json({
+      ok: true,
+      token,
+      mustChange: mc,
+      role: user.role,
+      name: user.name,
+      vid: Number(user.id),
+    });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
