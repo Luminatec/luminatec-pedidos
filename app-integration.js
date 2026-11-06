@@ -246,76 +246,67 @@
   // =========================================================================
   //  Login
   // =========================================================================
-  let adminMode = false;
   function wireLogin() {
     const card0 = document.querySelector("#scr-login .center-card") || document.getElementById("scr-login");
     const sel = document.getElementById("vsel");
     const btn = document.getElementById("loginBtn");
-    if (!sel || !btn || document.getElementById("vpass")) return;
+    if (!btn || document.getElementById("vpass")) return;
 
+    // Ocultar el selector de vendedores (ya no se elige de una lista) y su etiqueta
+    if (sel) {
+      sel.style.display = "none";
+      const selLbl = document.querySelector('label[for="vsel"]') ||
+        (sel.previousElementSibling && /vendedor|usuario|eleg/i.test(sel.previousElementSibling.textContent || "") ? sel.previousElementSibling : null);
+      if (selLbl) selLbl.style.display = "none";
+    }
+    // Ajustar subtítulo si menciona elegir de una lista / cartera
+    const sub = [...document.querySelectorAll("#scr-login p, #scr-login .sub, #scr-login .muted, #scr-login small")]
+      .find((n) => /eleg|cartera|lista|vendedor/i.test(n.textContent || ""));
+    if (sub) sub.textContent = "Ingresá con tu usuario y contraseña.";
+
+    // Campo usuario (mail)
+    const mailLbl = document.createElement("label"); mailLbl.className = "fld"; mailLbl.setAttribute("for", "vmail"); mailLbl.textContent = "Usuario (mail)";
+    const emailInp = document.createElement("input"); emailInp.className = "inp"; emailInp.id = "vmail"; emailInp.type = "email"; emailInp.autocomplete = "username"; emailInp.placeholder = "tu@mail.com";
+    // Campo contraseña
     const lbl = document.createElement("label"); lbl.className = "fld"; lbl.setAttribute("for", "vpass"); lbl.textContent = "Contraseña";
     const inp = document.createElement("input"); inp.className = "inp"; inp.id = "vpass"; inp.type = "password"; inp.autocomplete = "current-password"; inp.placeholder = "Tu contraseña";
-    const emailInp = document.createElement("input"); emailInp.className = "inp"; emailInp.id = "vmail"; emailInp.type = "email"; emailInp.autocomplete = "email"; emailInp.placeholder = "Tu mail"; emailInp.style.display = "none";
     const err = document.createElement("div"); err.id = "loginErr"; err.style.cssText = "color:var(--red,#FD0029);font-size:13px;margin-top:8px;min-height:16px";
 
-    sel.insertAdjacentElement("afterend", emailInp);
+    const anchor = sel || btn;
+    anchor.insertAdjacentElement("afterend", mailLbl);
+    mailLbl.insertAdjacentElement("afterend", emailInp);
     emailInp.insertAdjacentElement("afterend", lbl);
     lbl.insertAdjacentElement("afterend", inp);
-    const spacer = card0.querySelector('div[style*="height"]');
+    const spacer = card0 && card0.querySelector('div[style*="height"]');
     (spacer || btn).insertAdjacentElement("beforebegin", err);
 
-    // Links: olvidé mi clave + modo admin
+    // Link: olvidé mi contraseña
     const links = document.createElement("div");
-    links.style.cssText = "display:flex;justify-content:space-between;gap:10px;margin-top:12px;font-size:13px";
-    links.innerHTML = `<a id="lnkForgot" href="#" style="color:var(--muted,#9aa3ab);text-decoration:underline">¿Olvidaste tu contraseña?</a>
-                       <a id="lnkAdmin" href="#" style="color:var(--muted,#9aa3ab);text-decoration:underline">Administrador</a>`;
+    links.style.cssText = "margin-top:12px;font-size:13px";
+    links.innerHTML = `<a id="lnkForgot" href="#" style="color:var(--muted,#9aa3ab);text-decoration:underline">¿Olvidaste tu contraseña?</a>`;
     btn.insertAdjacentElement("afterend", links);
-    links.querySelector("#lnkForgot").onclick = (e) => { e.preventDefault(); showForgot(adminMode ? emailInp.value : ""); };
-    links.querySelector("#lnkAdmin").onclick = (e) => {
-      e.preventDefault();
-      adminMode = !adminMode;
-      sel.style.display = adminMode ? "none" : "";
-      emailInp.style.display = adminMode ? "" : "none";
-      lbl.textContent = "Contraseña";
-      links.querySelector("#lnkAdmin").textContent = adminMode ? "Soy vendedor" : "Administrador";
-      err.textContent = "";
-      const title = document.querySelector("#scr-login h1, #scr-login h2");
-      if (adminMode) emailInp.focus(); else sel.focus();
-    };
+    links.querySelector("#lnkForgot").onclick = (e) => { e.preventDefault(); showForgot(emailInp.value); };
 
-    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") btn.click(); });
-
-    btn.onclick = async () => {
+    const doLogin = async () => {
       err.textContent = "";
+      const email = (emailInp.value || "").trim();
       const pass = inp.value;
-      let payload, id = 0, name = "";
-      if (adminMode) {
-        const email = (emailInp.value || "").trim();
-        if (!email) { emailInp.focus(); return; }
-        if (!pass) { inp.focus(); return; }
-        payload = { email, password: pass };
-      } else {
-        id = parseInt(sel.value, 10);
-        if (!id) { sel.focus(); return; }
-        if (!pass) { inp.focus(); return; }
-        const v = (typeof VENDORS !== "undefined" ? VENDORS : []).find((x) => x.id === id);
-        name = v ? v.name : "";
-        // offline: permití entrar si ya hay token guardado de este vendedor
-        if (!navigator.onLine) {
-          if (ST.token && ST.vrid === id) { proceed(id, name); return; }
-          err.textContent = "Sin conexión: la primera vez hay que entrar con internet.";
-          return;
-        }
-        payload = { vendorId: id, vendorName: name, password: pass };
+      if (!email) { emailInp.focus(); return; }
+      if (!pass) { inp.focus(); return; }
+      // offline: permití entrar si ya hay sesión previa
+      if (!navigator.onLine) {
+        if (ST.token && ST.vrid) { proceed(ST.vrid, ST.vendor); return; }
+        err.textContent = "Sin conexión: la primera vez hay que entrar con internet.";
+        return;
       }
       btn.disabled = true; btn.textContent = "Entrando…";
       try {
-        const { ok, data } = await api("/api/login", payload);
+        const { ok, data } = await api("/api/login", { email, password: pass });
         if (ok && data.token) {
           ST.token = data.token;
           const done = () => {
             if (data.role === "admin") showAdminPanel();
-            else proceed(data.vid || id, data.name || name);
+            else proceed(data.vid, data.name);
           };
           if (data.mustChange) {
             showChangePassword({ forced: true, currentKnown: pass, token: data.token, onDone: () => done() });
@@ -324,6 +315,9 @@
       } catch { err.textContent = "Error de conexión. Probá de nuevo."; }
       finally { btn.disabled = false; btn.textContent = "Entrar"; }
     };
+    emailInp.addEventListener("keydown", (e) => { if (e.key === "Enter") inp.focus(); });
+    inp.addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+    btn.onclick = doLogin;
   }
 
   function proceed(id, name) {
