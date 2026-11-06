@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     const action = body.action;
 
     if (action === "list") {
-      const users = await sql`SELECT id, name, email, role, must_change, active, updated_at
+      const users = await sql`SELECT id, name, email, role, must_change, active, (pass_hash IS NOT NULL) AS has_pass, updated_at
                               FROM users ORDER BY (role='admin') DESC, name ASC`;
       res.status(200).json({ ok: true, users });
       return;
