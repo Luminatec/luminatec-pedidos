@@ -347,7 +347,7 @@ function ctx(){
   if(ST.client) h+=`<span class="pill">🏢 <b>${esc(ST.client.name.trim())}</b></span><button id="chgCli">Cambiar</button>`;
   el.innerHTML=h;
   const b=document.getElementById('chgCli'); if(b) b.onclick=()=>{show('scr-client');renderClients();};
-  const bv=document.getElementById('chgVen'); if(bv) bv.onclick=()=>{ST.client=null;ST.cart={};save();ctx();show('scr-login');};
+  const bv=document.getElementById('chgVen'); if(bv) bv.onclick=()=>{ST.vendor='';ST.vrid=0;ST.client=null;ST.cart={};ST.prices={};ST.extra={};ST.token=null;try{save();}catch(e){}try{localStorage.removeItem('lumi-meta');}catch(e){}location.reload();};
 }
 
 /* LOGIN */
@@ -500,7 +500,10 @@ function populatePlazoOptions(){
 }
 function populateCarrierList(){
   const dl=document.getElementById('carrierList'); if(!dl)return;
-  const cs=_meta().carriers||[]; dl.innerHTML=cs.map(c=>`<option value="${esc(c.name)}"></option>`).join('');
+  const cs=_meta().carriers||[]; const seen=new Set(); const names=[];
+  for(const c of cs){const n=(c.name||'').trim(); if(n&&!seen.has(n)){seen.add(n);names.push(n);}}
+  names.sort((a,b)=>a.localeCompare(b,'es'));
+  dl.innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('');
 }
 function carrierIdByName(name){const cs=_meta().carriers||[]; const hit=cs.find(c=>c.name===name); return hit?hit.id:null;}
 function populateDireccionOptions(){
@@ -560,6 +563,10 @@ function renderCartItems(){
   const box=document.getElementById('cartItems');const ids=Object.keys(ST.cart);
   if(!ids.length){box.innerHTML='<div class="empty">El pedido está vacío.</div>';}
   else{box.innerHTML=ids.map(id=>{const p=BYID[id];const q=ST.cart[id];const pr=ST.prices[id]??'';const img=IMGMAP[id];
+    const specs=(p.specs&&p.specs.length)?p.specs:[];
+    const extra=[];if(p.qty!=null)extra.push('Stock: '+p.qty);if(p.caja)extra.push('Caja master '+p.caja);if(p.ean)extra.push('EAN '+p.ean);
+    const lines=extra.concat(specs);
+    const specsHtml=lines.length?`<button class="specbtn" data-spectgl="${id}" style="background:none;border:0;color:var(--muted);font-size:11px;padding:5px 0 0;cursor:pointer">▸ Ver especificaciones</button><ul class="ci-specs" data-specs="${id}" hidden style="list-style:none;margin:5px 0 0;padding:0;display:flex;flex-direction:column;gap:3px">${lines.map(x=>`<li style="font-size:11px;color:var(--muted);line-height:1.35">• ${esc(x)}</li>`).join('')}</ul>`:'';
     return `<div class="citem" data-id="${id}">
       <div class="ci-img ph${img?'':' noimg'}">${img?`<img src="${img}" style="width:100%;height:100%;object-fit:contain" alt="">`:''}</div>
       <div class="ci-main"><div class="ci-nm">${esc(p.name)}</div><div class="ci-sku">${esc(p.sku)} · ${esc(p.brand)}</div>
@@ -567,6 +574,7 @@ function renderCartItems(){
           <div class="mini"><button data-cdec="${id}">−</button><input class="qv" inputmode="numeric" value="${q}" data-cqin="${id}"><button data-cinc="${id}">+</button></div>
           <span style="font-size:11px;color:var(--muted)">× $</span><input class="pin" inputmode="decimal" placeholder="precio" value="${pr}" data-cprice="${id}">
         </div>
+        ${specsHtml}
       </div>
       <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px"><span class="ci-sub">${pr>0?money(q*pr):'—'}</span><button class="rm" data-crm="${id}">🗑</button></div>
     </div>`;}).join('');}
@@ -576,6 +584,8 @@ function renderCartItems(){
   document.getElementById('confirmBtn').disabled=(t.items===0);
 }
 document.getElementById('cartItems').addEventListener('click',e=>{
+  const tg=e.target.closest('[data-spectgl]');
+  if(tg){const ul=document.querySelector('[data-specs="'+tg.dataset.spectgl+'"]');if(ul){ul.hidden=!ul.hidden;tg.textContent=ul.hidden?'▸ Ver especificaciones':'▾ Ocultar especificaciones';}return;}
   const inc=e.target.closest('[data-cinc]'),dec=e.target.closest('[data-cdec]'),rm=e.target.closest('[data-crm]');
   if(inc){const id=+inc.dataset.cinc;setQty(id,(ST.cart[id]||0)+1);renderCartItems();}
   else if(dec){const id=+dec.dataset.cdec;setQty(id,(ST.cart[id]||0)-1);renderCartItems();}

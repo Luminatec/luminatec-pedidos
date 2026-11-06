@@ -342,7 +342,8 @@
   }
 
   function logout() {
-    try { ST.token = null; ST.vendor = null; ST.vrid = null; ST.client = null; save(); } catch {}
+    try { ST.token = null; ST.vendor = null; ST.vrid = null; ST.client = null; ST.cart = {}; ST.prices = {}; ST.extra = {}; save(); } catch {}
+    try { localStorage.removeItem("lumi-meta"); } catch {}
     try { history.replaceState(null, "", location.pathname); } catch {}
     location.reload();
   }
