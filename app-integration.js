@@ -146,7 +146,7 @@
   // =========================================================================
   async function showAdminPanel() {
     const o = overlay(); o.style.alignItems = "flex-start";
-    const c = card(760);
+    const c = card(1040);
     c.innerHTML = `
       <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:4px">
         <h2 style="margin:0;font-size:20px">Administración</h2>
