@@ -448,6 +448,8 @@
       if (ok && data.ok) {
         let msg = "✅ <b>Pedido enviado.</b>";
         if (data.odooName) msg += ` Cargado en Odoo como <b>${data.odooName}</b> (borrador para aprobación).`;
+        if (data.appliedPaymentTerm) msg += `<br><span style="color:var(--muted)">Plazo aplicado en Odoo: <b>${esc(data.appliedPaymentTerm)}</b>.</span>`;
+        if (data.paymentTermUnmatched) msg += `<br><span style="color:var(--muted)">⚠️ El plazo “${esc(data.paymentTermUnmatched)}” no coincide con ninguno cargado en Odoo, quedó anotado en el comentario del pedido.</span>`;
         if (data.mailSent) msg += " Mail enviado.";
         if (data.mailWarning) msg += `<br><span style="color:var(--muted)">⚠️ ${data.mailWarning}</span>`;
         setNotaStatus(msg, "ok");

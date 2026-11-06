@@ -82,10 +82,35 @@ export default async function handler(req, res) {
       }
 
       const company = Number(process.env.ODOO_COMPANY_ID || 6);
+
+      // --- Resolver plazo de pago de forma AUTORITATIVA contra la base actual ---
+      // No confiamos a ciegas en el id que manda el navegador (puede venir de un
+      // cache viejo con ids cruzados, o ser texto libre). Si hay nombre, lo buscamos
+      // por nombre en account.payment.term; recién si no hay nombre usamos el id.
+      let termId = null, termName = null;
+      const wantTermName = String(extra.plazoName || "").trim();
+      const wantTermId = (typeof extra.plazoId === "number" && extra.plazoId > 0) ? extra.plazoId : null;
+      try {
+        if (wantTermName) {
+          const f = await odooExec("account.payment.term", "search_read",
+            [[["name", "=ilike", wantTermName]]], { fields: ["id", "name"], limit: 1 });
+          if (f && f[0]) { termId = f[0].id; termName = f[0].name; }
+        }
+        if (termId == null && wantTermName === "" && wantTermId) {
+          const f = await odooExec("account.payment.term", "search_read",
+            [[["id", "=", wantTermId]]], { fields: ["id", "name"], limit: 1 });
+          if (f && f[0]) { termId = f[0].id; termName = f[0].name; }
+        }
+      } catch (e) { /* módulo/campo ausente: se ignora, queda solo en la nota */ }
+
+      // Nombre del plazo para la nota: lo resuelto si existe, si no lo que tipeó el usuario.
+      const plazoNoteName = termName || wantTermName;
+
       const noteLines = [`Pedido ${orderNo || ""} cargado por ${vendorName || ""} desde el Tomador de Pedidos.`];
       if (extra.transporte) noteLines.push(`Transporte: ${extra.transporte}`);
       if (extra.direccion) noteLines.push(`Dirección de entrega: ${extra.direccion}`);
-      if (extra.plazoName && typeof extra.plazoId !== "number") noteLines.push(`Plazo de pago: ${extra.plazoName}`);
+      // Si NO pudimos mapearlo a un término real de Odoo, lo dejamos aclarado en la nota.
+      if (plazoNoteName && termId == null) noteLines.push(`Plazo de pago: ${plazoNoteName}`);
       if (extra.comentarios) noteLines.push(`Comentarios: ${extra.comentarios}`);
       const vals = {
         partner_id: Number(client.id),
@@ -93,15 +118,36 @@ export default async function handler(req, res) {
         order_line: orderLine,
         note: noteLines.join("\n"),
       };
-      if (typeof extra.plazoId === "number" && extra.plazoId > 0) vals.payment_term_id = extra.plazoId;
+      if (termId != null) vals.payment_term_id = termId;
       if (typeof extra.transporteId === "number" && extra.transporteId > 0) vals.carrier_id = extra.transporteId;
       if (typeof extra.direccionId === "number" && extra.direccionId > 0) vals.partner_shipping_id = extra.direccionId;
       if (process.env.ODOO_SALESPERSON_UID) vals.user_id = Number(process.env.ODOO_SALESPERSON_UID);
 
       const orderId = await odooExec("sale.order", "create", [vals]);
-      const read = await odooExec("sale.order", "read", [[orderId], ["name"]]);
+
+      // --- Verificar que Odoo no haya recomputado los campos desde el cliente ---
+      // Algunas versiones de Odoo recalculan payment_term_id / partner_shipping_id
+      // al crear (onchange del partner). Releemos y, si no coincide con lo pedido,
+      // forzamos con un write. Un write post-create no sufre ese recálculo.
+      const fixWrite = {};
+      try {
+        const chk = await odooExec("sale.order", "read",
+          [[orderId], ["name", "payment_term_id", "carrier_id", "partner_shipping_id"]]);
+        const row = chk?.[0] || {};
+        const idOf = (v) => (Array.isArray(v) ? v[0] : (v || null));
+        if (termId != null && idOf(row.payment_term_id) !== termId) fixWrite.payment_term_id = termId;
+        if (vals.carrier_id && idOf(row.carrier_id) !== vals.carrier_id) fixWrite.carrier_id = vals.carrier_id;
+        if (vals.partner_shipping_id && idOf(row.partner_shipping_id) !== vals.partner_shipping_id) fixWrite.partner_shipping_id = vals.partner_shipping_id;
+        if (Object.keys(fixWrite).length) await odooExec("sale.order", "write", [[orderId], fixWrite]);
+      } catch (e) { /* no crítico */ }
+
+      const read = await odooExec("sale.order", "read", [[orderId], ["name", "payment_term_id"]]);
       result.odooId = orderId;
       result.odooName = read?.[0]?.name || String(orderId);
+      // Devolvemos el plazo REALMENTE aplicado para que el front pueda confirmarlo.
+      const appliedTerm = read?.[0]?.payment_term_id;
+      result.appliedPaymentTerm = Array.isArray(appliedTerm) ? appliedTerm[1] : null;
+      if (plazoNoteName && termId == null) result.paymentTermUnmatched = plazoNoteName;
     }
 
     // ---- 2) Enviar mail (Resend) ----
