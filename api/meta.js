@@ -13,11 +13,17 @@ export default async function handler(req, res) {
 
     const out = { ok: true };
 
+    // Odoo es multi-empresa. Los plazos/transportes son por empresa, así que
+    // SOLO mostramos los de la empresa 6 (Co6) o los compartidos (company_id=false).
+    // Si mostráramos los de otra empresa, Odoo rechaza el pedido al cargarlo.
+    const companyId = Number(process.env.ODOO_COMPANY_ID || 6);
+    const coDomain = ["|", ["company_id", "=", companyId], ["company_id", "=", false]];
+
     // Plazos de pago (account.payment.term)
     try {
       out.paymentTerms = await odooExec(
         "account.payment.term", "search_read",
-        [[]], { fields: ["id", "name"], order: "id" }
+        [coDomain], { fields: ["id", "name"], order: "name" }
       );
     } catch (e) { out.paymentTerms = []; out.paymentTermsError = String(e.message || e); }
 
@@ -25,7 +31,7 @@ export default async function handler(req, res) {
     try {
       out.carriers = await odooExec(
         "delivery.carrier", "search_read",
-        [[]], { fields: ["id", "name"], order: "name" }
+        [coDomain], { fields: ["id", "name"], order: "name" }
       );
     } catch (e) { out.carriers = []; }
 

@@ -87,18 +87,22 @@ export default async function handler(req, res) {
       // No confiamos a ciegas en el id que manda el navegador (puede venir de un
       // cache viejo con ids cruzados, o ser texto libre). Si hay nombre, lo buscamos
       // por nombre en account.payment.term; recién si no hay nombre usamos el id.
+      // Odoo es multi-empresa: el plazo tiene que ser de la empresa del pedido (Co6)
+      // o compartido (company_id=false). Si no, Odoo rechaza la orden por
+      // "empresas incompatibles". Por eso acotamos la búsqueda a esa empresa.
+      const coDomain = ["|", ["company_id", "=", company], ["company_id", "=", false]];
       let termId = null, termName = null;
       const wantTermName = String(extra.plazoName || "").trim();
       const wantTermId = (typeof extra.plazoId === "number" && extra.plazoId > 0) ? extra.plazoId : null;
       try {
         if (wantTermName) {
           const f = await odooExec("account.payment.term", "search_read",
-            [[["name", "=ilike", wantTermName]]], { fields: ["id", "name"], limit: 1 });
+            [[...coDomain, ["name", "=ilike", wantTermName]]], { fields: ["id", "name"], limit: 1 });
           if (f && f[0]) { termId = f[0].id; termName = f[0].name; }
         }
         if (termId == null && wantTermName === "" && wantTermId) {
           const f = await odooExec("account.payment.term", "search_read",
-            [[["id", "=", wantTermId]]], { fields: ["id", "name"], limit: 1 });
+            [[...coDomain, ["id", "=", wantTermId]]], { fields: ["id", "name"], limit: 1 });
           if (f && f[0]) { termId = f[0].id; termName = f[0].name; }
         }
       } catch (e) { /* módulo/campo ausente: se ignora, queda solo en la nota */ }
