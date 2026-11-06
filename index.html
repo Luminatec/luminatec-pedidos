@@ -346,14 +346,14 @@ document.getElementById('loginBtn').onclick=()=>{
 function renderClients(){
   const q=document.getElementById('cq').value.trim().toLowerCase();
   const list=document.getElementById('clientlist');
-  let base=CLIENTS.filter(c=>c.rid===ST.vrid);
+  let base=ST.allClients?CLIENTS.slice():CLIENTS.filter(c=>c.rid===ST.vrid);
   let arr=base;
   if(q){arr=base.filter(c=>(c.name+' '+c.vat+' '+c.city).toLowerCase().includes(q));}
   const shown=arr.slice(0,80);
   list.innerHTML=shown.map(c=>`<div class="clientrow" data-id="${c.id}">
     <div><div class="nm">${esc(c.name.trim())}</div><div class="sub">${c.vat?('CUIT '+esc(c.vat)):'s/CUIT'}${c.city?(' · '+esc(c.city)):''}</div></div>
     <span class="go">›</span></div>`).join('');
-  document.getElementById('clientnote').textContent = !q ? `${base.length} clientes en tu cartera · escribí para buscar` : `${arr.length} resultado(s)${arr.length>80?' · mostrando 80':''}`;
+  document.getElementById('clientnote').textContent = !q ? `${base.length} clientes${ST.allClients?'':' en tu cartera'} · escribí para buscar` : `${arr.length} resultado(s)${arr.length>80?' · mostrando 80':''}`;
 }
 document.getElementById('cq').addEventListener('input',renderClients);
 document.getElementById('clientlist').addEventListener('click',e=>{

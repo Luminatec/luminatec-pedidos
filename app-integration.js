@@ -156,7 +156,10 @@
         </div>
       </div>
       <p style="margin:0 0 12px;color:var(--muted,#9aa3ab);font-size:13px">Usuarios de la app. "Clave temporal" genera una contraseña que el usuario deberá cambiar al entrar.</p>
-      <button id="apAdd" style="padding:9px 14px;border:0;border-radius:9px;background:var(--yellow,#F5C400);color:#17181a;font-weight:700;font-size:13.5px;cursor:pointer;margin-bottom:12px">+ Agregar usuario</button>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+        <button id="apOrder" style="padding:9px 14px;border:0;border-radius:9px;background:var(--red,#FD0029);color:#fff;font-weight:700;font-size:13.5px;cursor:pointer">🧾 Cargar un pedido</button>
+        <button id="apAdd" style="padding:9px 14px;border:0;border-radius:9px;background:var(--yellow,#F5C400);color:#17181a;font-weight:700;font-size:13.5px;cursor:pointer">+ Agregar usuario</button>
+      </div>
       <div id="apBanner"></div>
       <div id="apList" style="font-size:13.5px">Cargando…</div>
     `;
@@ -165,6 +168,7 @@
     $("apOut").onclick = logout;
     $("apPass").onclick = () => showChangePassword({ forced: false, token: ST.token, onDone: () => banner("Contraseña actualizada.", "ok") });
     $("apAdd").onclick = addUser;
+    $("apOrder").onclick = () => { o.remove(); enterAdminOrderMode(); };
 
     function banner(msg, kind, extraHtml) {
       const b = $("apBanner");
@@ -321,7 +325,18 @@
   }
 
   function proceed(id, name) {
-    ST.vendor = name; ST.vrid = id; ST.client = null; try { save(); } catch {} try { ctx(); } catch {}
+    ST.vendor = name; ST.vrid = id; ST.client = null; ST.allClients = false; ST.isAdmin = false; try { save(); } catch {} try { ctx(); } catch {}
+    show("scr-client"); try { renderClients(); } catch {} refreshPend(); mountAccountButton();
+  }
+
+  function tokenPayload() {
+    try { const p = (ST.token || "").split(".")[0].replace(/-/g, "+").replace(/_/g, "/"); return JSON.parse(atob(p)); } catch { return {}; }
+  }
+  // Admin: cargar pedidos viendo TODOS los clientes
+  function enterAdminOrderMode() {
+    const t = tokenPayload();
+    ST.vendor = t.vn || "Administración"; ST.vrid = t.uid || 0; ST.client = null; ST.allClients = true; ST.isAdmin = true;
+    try { save(); } catch {} try { ctx(); } catch {}
     show("scr-client"); try { renderClients(); } catch {} refreshPend(); mountAccountButton();
   }
 
@@ -341,13 +356,16 @@
     b.onclick = () => {
       const o = overlay(); const c = card(360);
       c.innerHTML = `<h2 style="margin:0 0 14px;font-size:18px">Mi cuenta</h2>
-        <button id="mcPass" style="${CSS.ghost};margin-top:0">Cambiar contraseña</button>
+        ${ST.isAdmin ? `<button id="mcPanel" style="${CSS.ghost};margin-top:0">Volver al panel de administración</button>` : ""}
+        <button id="mcPass" style="${CSS.ghost};margin-top:${ST.isAdmin ? "8px" : "0"}">Cambiar contraseña</button>
         <button id="mcOut" style="${CSS.btn};margin-top:10px;background:var(--red,#FD0029)">Cerrar sesión</button>
         <button id="mcClose" style="${CSS.ghost}">Volver</button>`;
       o.appendChild(c); document.body.appendChild(o);
       c.querySelector("#mcClose").onclick = () => o.remove();
       c.querySelector("#mcOut").onclick = logout;
       c.querySelector("#mcPass").onclick = () => { o.remove(); showChangePassword({ forced: false, token: ST.token, onDone: () => {} }); };
+      const mp = c.querySelector("#mcPanel");
+      if (mp) mp.onclick = () => { o.remove(); const fab = document.getElementById("acctFab"); if (fab) fab.remove(); showAdminPanel(); };
     };
     document.body.appendChild(b);
   }
