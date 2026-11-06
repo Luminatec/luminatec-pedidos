@@ -270,9 +270,10 @@
       <div id="cartItems"></div>
       <div id="orderFields" class="ofields">
         <div class="of-row">
-          <label>Transporte<input id="fTransporte" type="text" placeholder="Transporte / expedición" autocomplete="off"></label>
-          <label>Dirección de entrega<input id="fDireccion" type="text" placeholder="Dirección de entrega" autocomplete="off"></label>
+          <label>Transporte<input id="fTransporte" list="carrierList" type="text" placeholder="Buscá el transporte…" autocomplete="off"><datalist id="carrierList"></datalist></label>
+          <label>Dirección de entrega<select id="fDireccion"><option value="">— Sin especificar —</option></select></label>
         </div>
+        <label id="fDirOtraWrap" hidden>Dirección (a mano)<input id="fDirOtra" type="text" placeholder="Escribí la dirección" autocomplete="off"></label>
         <div class="of-row">
           <label>Plazo de pago<select id="fPlazo"><option value="">— Sin especificar —</option></select></label>
           <label id="fPlazoOtroWrap" hidden>Plazo (a mano)<input id="fPlazoOtro" type="text" placeholder="Escribí el plazo" autocomplete="off"></label>
@@ -489,30 +490,67 @@ function updateCartBar(){const t=totals();const bar=document.getElementById('car
 document.getElementById('cb-go').onclick=openCart;
 
 /* CART MODAL */
-function openCart(){renderCartItems();fillOrderFields();openModal('cartModal');}
+function openCart(){renderCartItems();fillOrderFields();loadClientMeta();openModal('cartModal');}
+function _meta(){let m=window.__lumiMeta; if(!m){try{m=JSON.parse(localStorage.getItem('lumi-meta')||'null');}catch(e){}} return m||{};}
 function populatePlazoOptions(){
   const sel=document.getElementById('fPlazo'); if(!sel)return;
-  let meta=window.__lumiMeta; if(!meta){try{meta=JSON.parse(localStorage.getItem('lumi-meta')||'null');}catch(e){}}
-  const terms=(meta&&meta.paymentTerms)||[];
-  const prev=sel.value;
+  const terms=_meta().paymentTerms||[]; const prev=sel.value;
   sel.innerHTML='<option value="">— Sin especificar —</option>'+terms.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')+'<option value="__otro__">Otro… (a mano)</option>';
+  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
+function populateCarrierList(){
+  const dl=document.getElementById('carrierList'); if(!dl)return;
+  const cs=_meta().carriers||[]; dl.innerHTML=cs.map(c=>`<option value="${esc(c.name)}"></option>`).join('');
+}
+function carrierIdByName(name){const cs=_meta().carriers||[]; const hit=cs.find(c=>c.name===name); return hit?hit.id:null;}
+function populateDireccionOptions(){
+  const sel=document.getElementById('fDireccion'); if(!sel)return;
+  const lc=window.__lumiClient; const addrs=(lc&&lc.addresses)||[]; const prev=sel.value;
+  sel.innerHTML='<option value="">— Sin especificar —</option>'+addrs.map(a=>`<option value="${a.id}">${esc(a.label)}</option>`).join('')+'<option value="__otra__">Otra… (a mano)</option>';
   if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
 }
 function fillOrderFields(){
   ST.extra=ST.extra||{}; const e=ST.extra;
-  populatePlazoOptions();
+  populatePlazoOptions(); populateCarrierList(); populateDireccionOptions();
   const t=document.getElementById('fTransporte'); if(t)t.value=e.transporte||'';
-  const d=document.getElementById('fDireccion'); if(d)d.value=e.direccion||'';
   const c=document.getElementById('fComentarios'); if(c)c.value=e.comentarios||'';
+  const dsel=document.getElementById('fDireccion'),dow=document.getElementById('fDirOtraWrap'),dot=document.getElementById('fDirOtra');
+  if(dsel){
+    if(e.direccionId==='__otra__'){dsel.value='__otra__';if(dow)dow.hidden=false;if(dot)dot.value=e.direccion||'';}
+    else{const v=(e.direccionId!=null&&e.direccionId!=='')?String(e.direccionId):''; dsel.value=[...dsel.options].some(o=>o.value===v)?v:''; if(dow)dow.hidden=true;}
+  }
   const sel=document.getElementById('fPlazo'),ow=document.getElementById('fPlazoOtroWrap'),ot=document.getElementById('fPlazoOtro');
   if(sel){
     if(e.plazoId==='__otro__'){sel.value='__otro__';if(ow)ow.hidden=false;if(ot)ot.value=e.plazoName||'';}
     else{const v=(e.plazoId!=null&&e.plazoId!=='')?String(e.plazoId):''; sel.value=[...sel.options].some(o=>o.value===v)?v:''; if(ow)ow.hidden=true;}
   }
 }
-document.getElementById('fTransporte').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.transporte=this.value;save();});
-document.getElementById('fDireccion').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.direccion=this.value;save();});
+function applyClientDefaults(){
+  const lc=window.__lumiClient; if(!lc)return; ST.extra=ST.extra||{};
+  if(ST.extra.forPid&&ST.extra.forPid!==lc.pid){ST.extra={};}
+  ST.extra.forPid=lc.pid;
+  if(!ST.extra.transporte&&lc.defaultCarrier){ST.extra.transporteId=lc.defaultCarrier.id;ST.extra.transporte=lc.defaultCarrier.name;}
+  if((ST.extra.plazoId===undefined||ST.extra.plazoId==='')&&lc.defaultPaymentTerm){ST.extra.plazoId=lc.defaultPaymentTerm.id;ST.extra.plazoName=lc.defaultPaymentTerm.name;}
+  if(!ST.extra.direccion){const del=(lc.addresses||[]).find(a=>a.type==='delivery')||(lc.addresses||[])[0]; if(del){ST.extra.direccionId=del.id;ST.extra.direccion=del.label;}}
+  save();
+}
+async function loadClientMeta(){
+  if(!ST.client||!ST.token)return;
+  const pid=ST.client.id;
+  if(window.__lumiClient&&window.__lumiClient.pid===pid){applyClientDefaults();fillOrderFields();return;}
+  try{
+    const r=await fetch('/api/client',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:ST.token,partnerId:pid})});
+    const j=await r.json();
+    if(j&&j.ok){window.__lumiClient={pid,addresses:j.addresses||[],defaultCarrier:j.defaultCarrier||null,defaultPaymentTerm:j.defaultPaymentTerm||null};applyClientDefaults();fillOrderFields();}
+  }catch(e){}
+}
+document.getElementById('fTransporte').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.transporte=this.value;ST.extra.transporteId=carrierIdByName(this.value);save();});
 document.getElementById('fComentarios').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.comentarios=this.value;save();});
+document.getElementById('fDireccion').addEventListener('change',function(){ST.extra=ST.extra||{};const dow=document.getElementById('fDirOtraWrap'),dot=document.getElementById('fDirOtra');
+  if(this.value==='__otra__'){ST.extra.direccionId='__otra__';if(dow)dow.hidden=false;ST.extra.direccion=(dot&&dot.value)||'';}
+  else{if(dow)dow.hidden=true;ST.extra.direccionId=this.value?Number(this.value):'';ST.extra.direccion=this.value?this.options[this.selectedIndex].text:'';}
+  save();});
+document.getElementById('fDirOtra').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.direccionId='__otra__';ST.extra.direccion=this.value;save();});
 document.getElementById('fPlazo').addEventListener('change',function(){ST.extra=ST.extra||{};const ow=document.getElementById('fPlazoOtroWrap'),ot=document.getElementById('fPlazoOtro');
   if(this.value==='__otro__'){ST.extra.plazoId='__otro__';if(ow)ow.hidden=false;ST.extra.plazoName=(ot&&ot.value)||'';}
   else{if(ow)ow.hidden=true;ST.extra.plazoId=this.value?Number(this.value):'';ST.extra.plazoName=this.value?this.options[this.selectedIndex].text:'';}

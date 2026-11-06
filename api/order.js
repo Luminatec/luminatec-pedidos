@@ -94,6 +94,8 @@ export default async function handler(req, res) {
         note: noteLines.join("\n"),
       };
       if (typeof extra.plazoId === "number" && extra.plazoId > 0) vals.payment_term_id = extra.plazoId;
+      if (typeof extra.transporteId === "number" && extra.transporteId > 0) vals.carrier_id = extra.transporteId;
+      if (typeof extra.direccionId === "number" && extra.direccionId > 0) vals.partner_shipping_id = extra.direccionId;
       if (process.env.ODOO_SALESPERSON_UID) vals.user_id = Number(process.env.ODOO_SALESPERSON_UID);
 
       const orderId = await odooExec("sale.order", "create", [vals]);
