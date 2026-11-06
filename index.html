@@ -348,7 +348,7 @@ function ctx(){
   if(ST.vendor) h+=`<span class="pill">👤 <b>${esc(ST.vendor)}</b></span><button id="chgVen">Salir</button>`;
   if(ST.client) h+=`<span class="pill">🏢 <b>${esc(ST.client.name.trim())}</b></span><button id="chgCli">Cambiar</button>`;
   el.innerHTML=h;
-  const b=document.getElementById('chgCli'); if(b) b.onclick=()=>{show('scr-client');renderClients();};
+  const b=document.getElementById('chgCli'); if(b) b.onclick=()=>{ST.client=null;save();ctx();show('scr-client');renderClients();};
   const bv=document.getElementById('chgVen'); if(bv) bv.onclick=()=>{ST.vendor='';ST.vrid=0;ST.client=null;ST.cart={};ST.prices={};ST.extra={};ST.token=null;try{save();}catch(e){}try{localStorage.removeItem('lumi-meta');}catch(e){}location.reload();};
 }
 
