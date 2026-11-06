@@ -6,7 +6,15 @@ import { verifyToken, odooExec, readBody } from "./_lib.js";
 
 const money = (n) => "$ " + Math.round(Number(n) || 0).toLocaleString("es-AR");
 
-function buildHtml({ orderNo, vendorName, client, items, total }) {
+function buildHtml({ orderNo, vendorName, client, items, total, extra = {} }) {
+  const exLines = [];
+  if (extra.transporte) exLines.push(["Transporte", extra.transporte]);
+  if (extra.direccion) exLines.push(["Dirección de entrega", extra.direccion]);
+  if (extra.plazoName) exLines.push(["Plazo de pago", extra.plazoName]);
+  if (extra.comentarios) exLines.push(["Comentarios", extra.comentarios]);
+  const extraHtml = exLines.length
+    ? `<div style="margin:0 0 12px;font-size:13px;line-height:1.5">${exLines.map((r) => `<div><b>${escapeHtml(r[0])}:</b> ${escapeHtml(r[1])}</div>`).join("")}</div>`
+    : "";
   const rows = items
     .map(
       (it) =>
@@ -22,6 +30,7 @@ function buildHtml({ orderNo, vendorName, client, items, total }) {
     <h2 style="margin:0 0 4px">Nota de pedido ${orderNo || ""}</h2>
     <p style="margin:0 0 2px"><b>Vendedor:</b> ${escapeHtml(vendorName || "")}</p>
     <p style="margin:0 0 12px"><b>Cliente:</b> ${escapeHtml(client?.name || "")}${client?.vat ? " · CUIT " + client.vat : ""}</p>
+    ${extraHtml}
     <table style="border-collapse:collapse;width:100%;font-size:13px">
       <thead><tr>
         <th style="text-align:left;padding:4px 10px;border-bottom:2px solid #333">SKU</th>
@@ -44,7 +53,7 @@ export default async function handler(req, res) {
   if (req.method !== "POST") { res.status(405).json({ ok: false, error: "Método no permitido" }); return; }
   try {
     const body = await readBody(req);
-    const { token, client, vendorName, orderNo, items = [], total, sendOdoo = true, sendMail = true } = body;
+    const { token, client, vendorName, orderNo, items = [], total, extra = {}, sendOdoo = true, sendMail = true } = body;
 
     const claims = verifyToken(token, process.env.APP_SECRET);
     if (!claims) { res.status(401).json({ ok: false, error: "Sesión inválida o vencida — volvé a entrar" }); return; }
@@ -73,12 +82,18 @@ export default async function handler(req, res) {
       }
 
       const company = Number(process.env.ODOO_COMPANY_ID || 6);
+      const noteLines = [`Pedido ${orderNo || ""} cargado por ${vendorName || ""} desde el Tomador de Pedidos.`];
+      if (extra.transporte) noteLines.push(`Transporte: ${extra.transporte}`);
+      if (extra.direccion) noteLines.push(`Dirección de entrega: ${extra.direccion}`);
+      if (extra.plazoName && typeof extra.plazoId !== "number") noteLines.push(`Plazo de pago: ${extra.plazoName}`);
+      if (extra.comentarios) noteLines.push(`Comentarios: ${extra.comentarios}`);
       const vals = {
         partner_id: Number(client.id),
         company_id: company,
         order_line: orderLine,
-        note: `Pedido ${orderNo || ""} cargado por ${vendorName || ""} desde el Tomador de Pedidos.`,
+        note: noteLines.join("\n"),
       };
+      if (typeof extra.plazoId === "number" && extra.plazoId > 0) vals.payment_term_id = extra.plazoId;
       if (process.env.ODOO_SALESPERSON_UID) vals.user_id = Number(process.env.ODOO_SALESPERSON_UID);
 
       const orderId = await odooExec("sale.order", "create", [vals]);
@@ -94,7 +109,7 @@ export default async function handler(req, res) {
       const from = process.env.MAIL_FROM;
       if (key && to.length && from) {
         const subject = `Nuevo pedido ${orderNo || ""} · ${client.name}${result.odooName ? " · Odoo " + result.odooName : ""}`;
-        const html = buildHtml({ orderNo, vendorName, client, items, total });
+        const html = buildHtml({ orderNo, vendorName, client, items, total, extra });
         const r = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },

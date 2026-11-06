@@ -308,6 +308,7 @@
         const { ok, data } = await api("/api/login", { email, password: pass });
         if (ok && data.token) {
           ST.token = data.token;
+          loadMeta();
           const done = () => {
             if (data.role === "admin") showAdminPanel();
             else proceed(data.vid, data.name);
@@ -404,7 +405,7 @@
       payload: {
         token: ST.token, orderNo, vendorName: ST.vendor,
         client: ST.client ? { id: ST.client.id, name: (ST.client.name || "").trim(), vat: ST.client.vat || "" } : null,
-        items, total, sendOdoo: opts.sendOdoo, sendMail: opts.sendMail,
+        items, total, extra: ST.extra || {}, sendOdoo: opts.sendOdoo, sendMail: opts.sendMail,
       },
     };
   }
@@ -521,12 +522,25 @@
   // =========================================================================
   //  Init
   // =========================================================================
+  async function loadMeta() {
+    if (!ST || !ST.token) return;
+    try {
+      const { ok, data } = await api("/api/meta", { token: ST.token });
+      if (ok && data && data.ok) {
+        window.__lumiMeta = { paymentTerms: data.paymentTerms || [], carriers: data.carriers || [] };
+        try { localStorage.setItem("lumi-meta", JSON.stringify(window.__lumiMeta)); } catch {}
+        try { if (typeof populatePlazoOptions === "function") populatePlazoOptions(); } catch {}
+      }
+    } catch {}
+  }
+
   function init() {
     // enlace de reseteo por mail
     const m = (location.hash || "").match(/reset=([a-f0-9]{16,})/i);
     if (m) { try { showReset(m[1]); } catch (e) {} }
     try { wireLogin(); } catch (e) {}
     try { hookNota(); } catch (e) {}
+    try { loadMeta(); } catch (e) {}
     try { refreshPend(); } catch (e) {}
     // si ya hay sesión de vendedor, mostrar botón de cuenta
     try { if (ST && ST.vrid && document.getElementById("scr-client")) mountAccountButton(); } catch (e) {}

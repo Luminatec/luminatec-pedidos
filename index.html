@@ -254,12 +254,31 @@
 </div>
 
 <!-- CART MODAL -->
+<style>
+.ofields{display:flex;flex-direction:column;gap:10px;margin:14px 0 4px}
+.ofields .of-row{display:flex;gap:10px;flex-wrap:wrap}
+.ofields label{display:flex;flex-direction:column;gap:5px;font-size:11.5px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted);flex:1 1 150px;min-width:140px}
+.ofields input,.ofields select,.ofields textarea{font-family:inherit;font-size:14px;text-transform:none;letter-spacing:normal;color:var(--fg);background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 11px;width:100%;box-sizing:border-box}
+.ofields textarea{resize:vertical;min-height:42px}
+.ofields select{appearance:none;-webkit-appearance:none}
+</style>
 <div class="modal" id="cartModal">
   <div class="modal-bg" data-close></div>
   <div class="sheet">
     <div class="sheet-h"><h3>Pedido</h3><button class="x" data-close>✕</button></div>
     <div class="sheet-b">
       <div id="cartItems"></div>
+      <div id="orderFields" class="ofields">
+        <div class="of-row">
+          <label>Transporte<input id="fTransporte" type="text" placeholder="Transporte / expedición" autocomplete="off"></label>
+          <label>Dirección de entrega<input id="fDireccion" type="text" placeholder="Dirección de entrega" autocomplete="off"></label>
+        </div>
+        <div class="of-row">
+          <label>Plazo de pago<select id="fPlazo"><option value="">— Sin especificar —</option></select></label>
+          <label id="fPlazoOtroWrap" hidden>Plazo (a mano)<input id="fPlazoOtro" type="text" placeholder="Escribí el plazo" autocomplete="off"></label>
+        </div>
+        <label>Comentarios<textarea id="fComentarios" rows="2" placeholder="Comentarios para este pedido"></textarea></label>
+      </div>
       <div class="totbar"><span class="tt" id="tot-u">0 ítems · 0 u</span><span class="tv" id="tot-v">—</span></div>
       <div class="warn" id="priceWarn" hidden>⚠️ Precios aún no cargados en Odoo. Cargalos a mano acá o pasame la lista mayorista y los precargo.</div>
       <div class="rowbtns">
@@ -470,7 +489,35 @@ function updateCartBar(){const t=totals();const bar=document.getElementById('car
 document.getElementById('cb-go').onclick=openCart;
 
 /* CART MODAL */
-function openCart(){renderCartItems();openModal('cartModal');}
+function openCart(){renderCartItems();fillOrderFields();openModal('cartModal');}
+function populatePlazoOptions(){
+  const sel=document.getElementById('fPlazo'); if(!sel)return;
+  let meta=window.__lumiMeta; if(!meta){try{meta=JSON.parse(localStorage.getItem('lumi-meta')||'null');}catch(e){}}
+  const terms=(meta&&meta.paymentTerms)||[];
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— Sin especificar —</option>'+terms.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')+'<option value="__otro__">Otro… (a mano)</option>';
+  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
+function fillOrderFields(){
+  ST.extra=ST.extra||{}; const e=ST.extra;
+  populatePlazoOptions();
+  const t=document.getElementById('fTransporte'); if(t)t.value=e.transporte||'';
+  const d=document.getElementById('fDireccion'); if(d)d.value=e.direccion||'';
+  const c=document.getElementById('fComentarios'); if(c)c.value=e.comentarios||'';
+  const sel=document.getElementById('fPlazo'),ow=document.getElementById('fPlazoOtroWrap'),ot=document.getElementById('fPlazoOtro');
+  if(sel){
+    if(e.plazoId==='__otro__'){sel.value='__otro__';if(ow)ow.hidden=false;if(ot)ot.value=e.plazoName||'';}
+    else{const v=(e.plazoId!=null&&e.plazoId!=='')?String(e.plazoId):''; sel.value=[...sel.options].some(o=>o.value===v)?v:''; if(ow)ow.hidden=true;}
+  }
+}
+document.getElementById('fTransporte').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.transporte=this.value;save();});
+document.getElementById('fDireccion').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.direccion=this.value;save();});
+document.getElementById('fComentarios').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.comentarios=this.value;save();});
+document.getElementById('fPlazo').addEventListener('change',function(){ST.extra=ST.extra||{};const ow=document.getElementById('fPlazoOtroWrap'),ot=document.getElementById('fPlazoOtro');
+  if(this.value==='__otro__'){ST.extra.plazoId='__otro__';if(ow)ow.hidden=false;ST.extra.plazoName=(ot&&ot.value)||'';}
+  else{if(ow)ow.hidden=true;ST.extra.plazoId=this.value?Number(this.value):'';ST.extra.plazoName=this.value?this.options[this.selectedIndex].text:'';}
+  save();});
+document.getElementById('fPlazoOtro').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.plazoId='__otro__';ST.extra.plazoName=this.value;save();});
 function renderCartItems(){
   const box=document.getElementById('cartItems');const ids=Object.keys(ST.cart);
   if(!ids.length){box.innerHTML='<div class="empty">El pedido está vacío.</div>';}
@@ -518,6 +565,12 @@ document.querySelectorAll('[data-kpclose]').forEach(el=>el.onclick=()=>closeModa
 document.getElementById('confirmBtn').onclick=()=>{closeModal('cartModal');renderNota();openModal('notaModal');};
 function renderNota(){
   const t=totals();const now=new Date();
+  const ex=ST.extra||{};const exRows=[];
+  if(ex.transporte)exRows.push(['Transporte',ex.transporte]);
+  if(ex.direccion)exRows.push(['Dirección de entrega',ex.direccion]);
+  if(ex.plazoName)exRows.push(['Plazo de pago',ex.plazoName]);
+  if(ex.comentarios)exRows.push(['Comentarios',ex.comentarios]);
+  const exBlock=exRows.length?`<div style="margin:10px 0;padding:10px 12px;border:1px solid var(--border);border-radius:10px;font-size:13px;line-height:1.55">${exRows.map(r=>`<div><b>${esc(r[0])}:</b> ${esc(r[1])}</div>`).join('')}</div>`:'';
   const num='P'+now.getFullYear()+String(now.getMonth()+1).padStart(2,'0')+String(now.getDate()).padStart(2,'0')+'-'+String(now.getHours()).padStart(2,'0')+String(now.getMinutes()).padStart(2,'0');
   const rows=Object.keys(ST.cart).map(id=>{const p=BYID[id];const q=ST.cart[id];const pr=ST.prices[id]||0;
     return `<tr><td>${esc(p.sku)}</td><td>${esc(p.name)}</td><td class="r">${q}</td><td class="r">${pr>0?money(pr):'—'}</td><td class="r">${pr>0?money(q*pr):'—'}</td></tr>`;}).join('');
@@ -531,6 +584,7 @@ function renderNota(){
     <tbody>${rows}</tbody></table>
     <div class="totbar"><span class="tt">${t.items} ítem(s) · ${t.u} unidades</span><span class="tv">${t.amount>0?money(t.amount):'—'}</span></div>
     ${t.missing?`<div class="warn">${t.missing} ítem(s) sin precio. El total es parcial.</div>`:''}
+    ${exBlock}
     <div class="rowbtns"><button class="btn sec" id="backBtn">← Volver a editar</button></div>
     <div class="rowbtns">
       <button class="btn" id="copyBtn">Copiar nota</button>
@@ -543,13 +597,18 @@ function renderNota(){
   document.getElementById('copyBtn').onclick=()=>copyNota(num);
   document.getElementById('mailBtn').onclick=()=>alert('Próxima fase: envío automático por mail a las personas que definas (requiere servidor).');
   document.getElementById('odooBtn').onclick=()=>alert('Próxima fase: creación del pedido como presupuesto borrador en Odoo para aprobación (requiere conexión).');
-  document.getElementById('newBtn').onclick=()=>{ST.cart={};save();closeModal('notaModal');updateCartBar();renderCat();};
+  document.getElementById('newBtn').onclick=()=>{ST.cart={};ST.extra={};save();closeModal('notaModal');updateCartBar();renderCat();};
   document.getElementById('backBtn').onclick=()=>{closeModal('notaModal');openCart();};
 }
 function copyNota(num){
   const t=totals();let txt=`PEDIDO ${num}\nVendedor: ${ST.vendor}\nCliente: ${ST.client?ST.client.name.trim():''}${ST.client&&ST.client.vat?(' (CUIT '+ST.client.vat+')'):''}\n\n`;
   Object.keys(ST.cart).forEach(id=>{const p=BYID[id];const q=ST.cart[id];const pr=ST.prices[id]||0;txt+=`${q} x ${p.sku} ${p.name}${pr>0?(' — $'+pr+' c/u = $'+Math.round(q*pr)):''}\n`;});
   txt+=`\nTotal: ${t.u} unidades${t.amount>0?(' · $'+Math.round(t.amount).toLocaleString('es-AR')):''}`;
+  const ex=ST.extra||{};
+  if(ex.transporte)txt+=`\nTransporte: ${ex.transporte}`;
+  if(ex.direccion)txt+=`\nDirección de entrega: ${ex.direccion}`;
+  if(ex.plazoName)txt+=`\nPlazo de pago: ${ex.plazoName}`;
+  if(ex.comentarios)txt+=`\nComentarios: ${ex.comentarios}`;
   const btn=document.getElementById('copyBtn');
   navigator.clipboard.writeText(txt).then(()=>{btn.textContent='✓ Copiado';setTimeout(()=>btn.textContent='Copiar nota',1500);},()=>{alert(txt);});
 }
