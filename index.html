@@ -235,6 +235,7 @@
       <button data-col="promo" class="col">★ Promociones</button>
       <button data-col="liq" class="col">Liquidaciones</button>
       <button data-col="all" class="col">Catálogo completo</button>
+      <button id="colPL" class="col">📄 Listas de precios</button>
     </div></div>
     <div class="ctrls">
       <div class="searchbar">
@@ -400,7 +401,7 @@ function buildCatChips(){
   row.hidden=false;
 }
 document.getElementById('catchips').addEventListener('click',e=>{const b=e.target.closest('.catchip');if(!b)return;activeCat=b.dataset.c;document.querySelectorAll('#catchips .catchip').forEach(x=>x.classList.toggle('active',x===b));renderCat();});
-document.getElementById('colbar').addEventListener('click',e=>{const b=e.target.closest('.col');if(!b)return;col=b.dataset.col;activeBrand='Todas';bs.value='Todas';buildCatChips();syncColbar();renderCat();});
+document.getElementById('colbar').addEventListener('click',e=>{const b=e.target.closest('.col');if(!b)return;if(b.id==='colPL'){if(window.showPriceLists)window.showPriceLists();return;}col=b.dataset.col;activeBrand='Todas';bs.value='Todas';buildCatChips();syncColbar();renderCat();});
 document.getElementById('pq').addEventListener('input',e=>{pquery=e.target.value;renderCat();});
 function syncColbar(){document.querySelectorAll('#colbar .col').forEach(x=>x.classList.toggle('active',x.dataset.col===col));}
 function openCatalog(){show('scr-catalog');syncColbar();renderCat();updateCartBar();}
@@ -487,7 +488,12 @@ document.getElementById('catmain').addEventListener('change',e=>{
 
 /* CART BAR + totals */
 function totals(){let u=0,items=0,amount=0,missing=0;for(const id in ST.cart){const q=ST.cart[id];items++;u+=q;const pr=ST.prices[id];if(pr>0)amount+=q*pr;else missing++;}return{u,items,amount,missing};}
-function updateCartBar(){const t=totals();const bar=document.getElementById('cartbar');bar.classList.toggle('hidden',t.items===0);document.getElementById('cb-u').textContent=`${t.items} ítem(s) · ${t.u} u`;document.getElementById('cb-t').textContent=t.amount>0?money(t.amount)+(t.missing?' +':''):'s/precio';}
+function updateCartBar(){const t=totals();const bar=document.getElementById('cartbar');bar.classList.toggle('hidden',t.items===0);document.getElementById('cb-u').textContent=`${t.items} ítem(s) · ${t.u} u`;document.getElementById('cb-t').textContent=t.amount>0?money(t.amount)+(t.missing?' +':''):'s/precio';
+  // Subir los botones flotantes por encima de la barra del carrito para que no tapen "Ver pedido"
+  const shift=t.items>0?78:0;
+  const af=document.getElementById('acctFab'); if(af) af.style.bottom='calc('+(14+shift)+'px + env(safe-area-inset-bottom,0px))';
+  const pf=document.getElementById('pendFab'); if(pf) pf.style.bottom='calc('+(14+shift)+'px + env(safe-area-inset-bottom,0px))';
+}
 document.getElementById('cb-go').onclick=openCart;
 
 /* CART MODAL */

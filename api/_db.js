@@ -40,6 +40,17 @@ export async function ensureSchema() {
       used BOOLEAN NOT NULL DEFAULT false,
       created_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`;
+    // Listas de precios (archivos en Vercel Blob; acá guardamos los metadatos)
+    await sql`CREATE TABLE IF NOT EXISTS price_lists (
+      id BIGSERIAL PRIMARY KEY,
+      name TEXT NOT NULL,
+      filename TEXT,
+      url TEXT NOT NULL,
+      size BIGINT,
+      content_type TEXT,
+      uploaded_by BIGINT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    )`;
   })();
   return _ready;
 }

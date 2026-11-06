@@ -6,6 +6,7 @@
   "engines": { "node": "22.x" },
   "dependencies": {
     "@neondatabase/serverless": "^0.10.4",
+    "@vercel/blob": "^2.8.2",
     "bcryptjs": "^2.4.3"
   }
 }

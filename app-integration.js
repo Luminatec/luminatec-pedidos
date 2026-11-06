@@ -159,6 +159,7 @@
       <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
         <button id="apOrder" style="padding:9px 14px;border:0;border-radius:9px;background:var(--red,#FD0029);color:#fff;font-weight:700;font-size:13.5px;cursor:pointer">🧾 Cargar un pedido</button>
         <button id="apAdd" style="padding:9px 14px;border:0;border-radius:9px;background:var(--yellow,#F5C400);color:#17181a;font-weight:700;font-size:13.5px;cursor:pointer">+ Agregar usuario</button>
+        <button id="apPL" style="padding:9px 14px;border:1px solid rgba(255,255,255,.18);border-radius:9px;background:transparent;color:var(--fg,#e9e9ea);font-weight:700;font-size:13.5px;cursor:pointer">📄 Listas de precios</button>
       </div>
       <div id="apBanner"></div>
       <div id="apList" style="font-size:13.5px">Cargando…</div>
@@ -169,6 +170,7 @@
     $("apPass").onclick = () => showChangePassword({ forced: false, token: ST.token, onDone: () => banner("Contraseña actualizada.", "ok") });
     $("apAdd").onclick = addUser;
     $("apOrder").onclick = () => { o.remove(); enterAdminOrderMode(); };
+    $("apPL").onclick = () => showPriceLists();
 
     function banner(msg, kind, extraHtml) {
       const b = $("apBanner");
@@ -542,6 +544,83 @@
       }
     } catch {}
   }
+
+  // =========================================================================
+  //  Listas de precios
+  // =========================================================================
+  function fmtSize(n) {
+    if (!n) return "";
+    return n > 1048576 ? (n / 1048576).toFixed(1) + " MB" : Math.round(n / 1024) + " KB";
+  }
+  async function showPriceLists() {
+    const o = overlay(); o.style.alignItems = "flex-start";
+    const c = card(640);
+    c.innerHTML = `
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px">
+        <h2 style="margin:0;font-size:18px">Listas de precios</h2>
+        <button id="plClose" style="width:auto;margin:0;padding:8px 12px;border:1px solid rgba(255,255,255,.18);border-radius:10px;background:transparent;color:var(--fg,#e9e9ea);font-weight:600;cursor:pointer">Cerrar</button>
+      </div>
+      ${ST.isAdmin ? `<div style="border:1px dashed rgba(255,255,255,.2);border-radius:12px;padding:12px;margin-bottom:14px">
+        <label style="${CSS.lbl}">Nombre de la lista</label>
+        <input id="plName" placeholder="Ej: Lista mayorista Noviembre" style="${CSS.inp}">
+        <input id="plFile" type="file" accept=".pdf,.xls,.xlsx,.csv,image/*" style="color:var(--fg,#e9e9ea);font-size:13px;margin:2px 0 6px">
+        <button id="plUp" style="${CSS.btn}">Subir lista</button>
+        <div id="plMsg" style="font-size:12.5px;margin-top:8px;color:var(--muted,#9aa3ab)"></div>
+      </div>` : ""}
+      <div id="plList" style="font-size:13.5px">Cargando…</div>`;
+    o.appendChild(c); document.body.appendChild(o);
+    c.querySelector("#plClose").onclick = () => o.remove();
+
+    async function load() {
+      const box = c.querySelector("#plList");
+      const { ok, data } = await api("/api/pricelists", { token: ST.token, action: "list" });
+      if (!ok || !data.ok) { box.innerHTML = `<span style="color:var(--red,#FD0029)">${esc((data && data.error) || "No se pudo cargar.")}</span>`; return; }
+      const lists = data.lists || [];
+      if (!lists.length) { box.innerHTML = `<div style="color:var(--muted,#9aa3ab)">Todavía no hay listas cargadas.</div>`; return; }
+      box.innerHTML = lists.map((l) => {
+        const d = l.created_at ? new Date(l.created_at).toLocaleDateString("es-AR") : "";
+        const sz = fmtSize(Number(l.size));
+        return `<div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid rgba(255,255,255,.08)">
+          <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(l.name)}</div><div style="color:var(--muted,#9aa3ab);font-size:11.5px">${esc(d)}${sz ? " · " + sz : ""}</div></div>
+          <a href="${esc(l.url)}" target="_blank" rel="noopener" style="flex:none;padding:8px 14px;border-radius:10px;background:var(--red,#FD0029);color:#fff;font-weight:700;font-size:13px;text-decoration:none">Descargar</a>
+          ${ST.isAdmin ? `<button data-del="${l.id}" title="Borrar" style="flex:none;padding:8px 10px;border:1px solid rgba(255,255,255,.18);border-radius:10px;background:transparent;color:var(--fg,#e9e9ea);cursor:pointer">🗑</button>` : ""}
+        </div>`;
+      }).join("");
+      box.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
+        if (!confirm("¿Borrar esta lista de precios?")) return;
+        const { ok, data } = await api("/api/pricelists", { token: ST.token, action: "delete", id: Number(b.dataset.del) });
+        if (ok && data.ok) load(); else alert((data && data.error) || "Error al borrar");
+      }));
+    }
+    load();
+
+    if (ST.isAdmin) {
+      const up = c.querySelector("#plUp");
+      up.onclick = async () => {
+        const name = (c.querySelector("#plName").value || "").trim();
+        const fileInp = c.querySelector("#plFile");
+        const file = fileInp.files && fileInp.files[0];
+        const msg = c.querySelector("#plMsg");
+        if (!name) { msg.textContent = "Poné un nombre para la lista."; return; }
+        if (!file) { msg.textContent = "Elegí un archivo."; return; }
+        up.disabled = true; msg.textContent = "Subiendo…";
+        try {
+          const mod = await import("https://esm.sh/@vercel/blob@2.8.2/client");
+          const blob = await mod.upload(file.name, file, {
+            access: "public",
+            handleUploadUrl: "/api/blob-upload",
+            clientPayload: JSON.stringify({ token: ST.token }),
+          });
+          const { ok, data } = await api("/api/pricelists", { token: ST.token, action: "register", name, filename: file.name, url: blob.url, size: file.size, contentType: file.type });
+          if (ok && data.ok) { msg.textContent = "✓ Lista subida."; c.querySelector("#plName").value = ""; fileInp.value = ""; load(); }
+          else { msg.textContent = (data && data.error) || "Se subió el archivo pero falló el registro."; }
+        } catch (e) {
+          msg.textContent = "Error al subir: " + (e && e.message ? e.message : e);
+        } finally { up.disabled = false; }
+      };
+    }
+  }
+  window.showPriceLists = showPriceLists;
 
   function init() {
     // enlace de reseteo por mail
