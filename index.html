@@ -270,9 +270,10 @@
       <div id="cartItems"></div>
       <div id="orderFields" class="ofields">
         <div class="of-row">
-          <label>Transporte<input id="fTransporte" list="carrierList" type="text" placeholder="Buscá el transporte…" autocomplete="off"><datalist id="carrierList"></datalist></label>
+          <label>Transporte<select id="fTransporte"><option value="">— Sin especificar —</option></select></label>
           <label>Dirección de entrega<select id="fDireccion"><option value="">— Sin especificar —</option></select></label>
         </div>
+        <label id="fTransOtraWrap" hidden>Elegir otro transporte<input id="fTransOtra" list="carrierList" type="text" placeholder="Buscá el transporte…" autocomplete="off"><datalist id="carrierList"></datalist></label>
         <label id="fDirOtraWrap" hidden>Dirección (a mano)<input id="fDirOtra" type="text" placeholder="Escribí la dirección" autocomplete="off"></label>
         <div class="of-row">
           <label>Plazo de pago<select id="fPlazo"><option value="">— Sin especificar —</option></select></label>
@@ -506,6 +507,13 @@ function populateCarrierList(){
   dl.innerHTML=names.map(n=>`<option value="${esc(n)}"></option>`).join('');
 }
 function carrierIdByName(name){const cs=_meta().carriers||[]; const hit=cs.find(c=>c.name===name); return hit?hit.id:null;}
+function populateTransporteSelect(){
+  const sel=document.getElementById('fTransporte'); if(!sel)return;
+  const def=window.__lumiClient&&window.__lumiClient.defaultCarrier;
+  const prev=sel.value;
+  sel.innerHTML='<option value="">— Sin especificar —</option>'+(def?`<option value="def">${esc(def.name)}</option>`:'')+'<option value="__otra__">Elegir otra…</option>';
+  if(prev&&[...sel.options].some(o=>o.value===prev))sel.value=prev;
+}
 function populateDireccionOptions(){
   const sel=document.getElementById('fDireccion'); if(!sel)return;
   const lc=window.__lumiClient; const addrs=(lc&&lc.addresses)||[]; const prev=sel.value;
@@ -514,9 +522,15 @@ function populateDireccionOptions(){
 }
 function fillOrderFields(){
   ST.extra=ST.extra||{}; const e=ST.extra;
-  populatePlazoOptions(); populateCarrierList(); populateDireccionOptions();
-  const t=document.getElementById('fTransporte'); if(t)t.value=e.transporte||'';
+  populatePlazoOptions(); populateCarrierList(); populateTransporteSelect(); populateDireccionOptions();
   const c=document.getElementById('fComentarios'); if(c)c.value=e.comentarios||'';
+  const tsel=document.getElementById('fTransporte'),tow=document.getElementById('fTransOtraWrap'),tot=document.getElementById('fTransOtra');
+  const tdef=window.__lumiClient&&window.__lumiClient.defaultCarrier;
+  if(tsel){
+    if(!e.transporte&&e.transporteId==null){tsel.value='';if(tow)tow.hidden=true;}
+    else if(tdef&&e.transporte===tdef.name){tsel.value='def';if(tow)tow.hidden=true;}
+    else{tsel.value='__otra__';if(tow)tow.hidden=false;if(tot)tot.value=e.transporte||'';}
+  }
   const dsel=document.getElementById('fDireccion'),dow=document.getElementById('fDirOtraWrap'),dot=document.getElementById('fDirOtra');
   if(dsel){
     if(e.direccionId==='__otra__'){dsel.value='__otra__';if(dow)dow.hidden=false;if(dot)dot.value=e.direccion||'';}
@@ -547,7 +561,12 @@ async function loadClientMeta(){
     if(j&&j.ok){window.__lumiClient={pid,addresses:j.addresses||[],defaultCarrier:j.defaultCarrier||null,defaultPaymentTerm:j.defaultPaymentTerm||null};applyClientDefaults();fillOrderFields();}
   }catch(e){}
 }
-document.getElementById('fTransporte').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.transporte=this.value;ST.extra.transporteId=carrierIdByName(this.value);save();});
+document.getElementById('fTransporte').addEventListener('change',function(){ST.extra=ST.extra||{};const tow=document.getElementById('fTransOtraWrap'),tot=document.getElementById('fTransOtra');const def=window.__lumiClient&&window.__lumiClient.defaultCarrier;
+  if(this.value==='__otra__'){if(tow)tow.hidden=false;ST.extra.transporte=(tot&&tot.value)||'';ST.extra.transporteId=carrierIdByName(ST.extra.transporte);}
+  else if(this.value==='def'){if(tow)tow.hidden=true;ST.extra.transporte=def?def.name:'';ST.extra.transporteId=def?def.id:null;}
+  else{if(tow)tow.hidden=true;ST.extra.transporte='';ST.extra.transporteId=null;}
+  save();});
+document.getElementById('fTransOtra').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.transporte=this.value;ST.extra.transporteId=carrierIdByName(this.value);save();});
 document.getElementById('fComentarios').addEventListener('input',function(){ST.extra=ST.extra||{};ST.extra.comentarios=this.value;save();});
 document.getElementById('fDireccion').addEventListener('change',function(){ST.extra=ST.extra||{};const dow=document.getElementById('fDirOtraWrap'),dot=document.getElementById('fDirOtra');
   if(this.value==='__otra__'){ST.extra.direccionId='__otra__';if(dow)dow.hidden=false;ST.extra.direccion=(dot&&dot.value)||'';}
