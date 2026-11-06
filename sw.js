@@ -1,6 +1,6 @@
 // Service worker: "red primero" para el shell (app siempre fresca online),
 // con caída a caché cuando no hay conexión. La API nunca se cachea.
-const CACHE = "lumi-pedidos-v2";
+const CACHE = "lumi-pedidos-v3";
 const SHELL = [
   "/",
   "/index.html",
@@ -33,10 +33,11 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Resto (shell/estáticos y navegación): red primero, con actualización de caché.
-  // Si no hay conexión, se sirve lo cacheado (y el index para navegación).
+  // Resto (shell/estáticos y navegación): red primero, SIEMPRE revalidando contra
+  // el servidor ("no-cache" evita que el navegador devuelva un HTML viejo de su
+  // propia caché HTTP). Si no hay conexión, se sirve lo cacheado (y el index).
   e.respondWith(
-    fetch(req)
+    fetch(req, { cache: "no-cache" })
       .then((res) => {
         if (res && res.status === 200 && req.method === "GET") {
           const copy = res.clone();
