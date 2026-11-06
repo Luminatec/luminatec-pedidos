@@ -31,6 +31,8 @@ export async function ensureSchema() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
     )`;
+    // Permiso "ve todos los clientes" sin ser admin (p. ej. asistentes de ventas)
+    await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS allclients BOOLEAN NOT NULL DEFAULT false`;
     await sql`CREATE TABLE IF NOT EXISTS reset_tokens (
       token_hash TEXT PRIMARY KEY,
       user_id BIGINT NOT NULL,

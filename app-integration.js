@@ -195,13 +195,16 @@
           : u.must_change ? '<span style="color:var(--yellow,#F5C400)">Debe cambiar</span>'
           : '<span style="color:#49c17a">OK</span>';
         const rol = u.role === "admin" ? '<span style="color:#7ab8ff">admin</span>' : "vendedor";
+        const allBadge = (u.allclients && u.role !== "admin") ? ' · <span style="color:#49c17a">todos los clientes</span>' : "";
+        const allBtn = u.role === "admin" ? "" : `<button data-act="allcli" data-id="${u.id}" data-all="${u.allclients ? 1 : 0}" style="${rowBtn}">${u.allclients ? "Solo su cartera" : "Todos los clientes"}</button>`;
         return `<tr style="border-top:1px solid rgba(255,255,255,.08)">
-          <td style="padding:8px 6px">${esc(u.name)}<div style="color:var(--muted,#9aa3ab);font-size:11.5px">id ${u.id} · ${rol}</div></td>
+          <td style="padding:8px 6px">${esc(u.name)}<div style="color:var(--muted,#9aa3ab);font-size:11.5px">id ${u.id} · ${rol}${allBadge}</div></td>
           <td style="padding:8px 6px;color:var(--muted,#9aa3ab)">${esc(u.email || "—")}</td>
           <td style="padding:8px 6px">${estado}</td>
           <td style="padding:8px 6px;white-space:nowrap;text-align:right">
             <button data-act="temp" data-id="${u.id}" data-name="${esc(u.name)}" style="${rowBtn}">Clave temporal</button>
             <button data-act="email" data-id="${u.id}" data-email="${esc(u.email || "")}" style="${rowBtn}">Mail</button>
+            ${allBtn}
             <button data-act="active" data-id="${u.id}" data-active="${u.active ? 1 : 0}" style="${rowBtn}">${u.active ? "Desactivar" : "Activar"}</button>
           </td>
         </tr>`;
@@ -230,6 +233,10 @@
         if (!confirm(activate ? "¿Activar este usuario?" : "¿Desactivar este usuario? No podrá ingresar.")) return;
         const { ok, data } = await api("/api/admin", { token: ST.token, action: "setActive", id, active: activate });
         if (ok && data.ok) { banner(activate ? "Usuario activado." : "Usuario desactivado.", "ok"); load(); } else banner(esc(data.error || "Error"), "err");
+      } else if (ds.act === "allcli") {
+        const turnOn = ds.all === "0";
+        const { ok, data } = await api("/api/admin", { token: ST.token, action: "update", id, allclients: turnOn });
+        if (ok && data.ok) { banner(turnOn ? "Ahora ve todos los clientes." : "Ahora ve solo su cartera.", "ok"); load(); } else banner(esc(data.error || "Error"), "err");
       }
     }
 
@@ -240,7 +247,8 @@
       if (!name) return;
       const email = prompt("Mail (opcional, para recuperar contraseña):", "") || "";
       const isAdmin = confirm("¿Es administrador? (Aceptar = admin, Cancelar = vendedor)");
-      const { ok, data } = await api("/api/admin", { token: ST.token, action: "create", id: Number(id), name: name.trim(), email: email.trim(), role: isAdmin ? "admin" : "vendor" });
+      const allclients = isAdmin ? true : confirm("¿Puede cargar pedidos para TODOS los clientes? (Aceptar = sí; Cancelar = solo su cartera)");
+      const { ok, data } = await api("/api/admin", { token: ST.token, action: "create", id: Number(id), name: name.trim(), email: email.trim(), role: isAdmin ? "admin" : "vendor", allclients });
       if (ok && data.tempPassword) { showTemp(name, data.tempPassword); load(); } else banner(esc(data.error || "Error"), "err");
     }
 
@@ -326,7 +334,7 @@
   }
 
   function proceed(id, name) {
-    ST.vendor = name; ST.vrid = id; ST.client = null; ST.allClients = false; ST.isAdmin = false; try { save(); } catch {} try { ctx(); } catch {}
+    ST.vendor = name; ST.vrid = id; ST.client = null; ST.allClients = !!tokenPayload().ac; ST.isAdmin = false; try { save(); } catch {} try { ctx(); } catch {}
     show("scr-client"); try { renderClients(); } catch {} refreshPend(); mountAccountButton();
   }
 

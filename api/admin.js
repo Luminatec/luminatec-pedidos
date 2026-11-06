@@ -33,7 +33,7 @@ export default async function handler(req, res) {
     const action = body.action;
 
     if (action === "list") {
-      const users = await sql`SELECT id, name, email, role, must_change, active, (pass_hash IS NOT NULL) AS has_pass, updated_at
+      const users = await sql`SELECT id, name, email, role, must_change, active, allclients, (pass_hash IS NOT NULL) AS has_pass, updated_at
                               FROM users ORDER BY (role='admin') DESC, name ASC`;
       res.status(200).json({ ok: true, users });
       return;
@@ -44,14 +44,15 @@ export default async function handler(req, res) {
       const name = String(body.name || "").trim();
       const email = body.email ? String(body.email).trim() : null;
       const role = body.role === "admin" ? "admin" : "vendor";
+      const allclients = !!body.allclients;
       if (!id || !name) { res.status(400).json({ ok: false, error: "Falta id o nombre" }); return; }
       const tmp = genTemp();
       const hash = await bcrypt.hash(tmp, 10);
-      await sql`INSERT INTO users (id, name, email, role, pass_hash, must_change, active)
-                VALUES (${id}, ${name}, ${email}, ${role}, ${hash}, true, true)
+      await sql`INSERT INTO users (id, name, email, role, pass_hash, must_change, active, allclients)
+                VALUES (${id}, ${name}, ${email}, ${role}, ${hash}, true, true, ${allclients})
                 ON CONFLICT (id) DO UPDATE SET
                   name=${name}, email=COALESCE(${email}, users.email),
-                  role=${role}, pass_hash=${hash}, must_change=true, active=true, updated_at=now()`;
+                  role=${role}, pass_hash=${hash}, must_change=true, active=true, allclients=${allclients}, updated_at=now()`;
       res.status(200).json({ ok: true, tempPassword: tmp });
       return;
     }
@@ -70,6 +71,9 @@ export default async function handler(req, res) {
       if (Object.prototype.hasOwnProperty.call(body, "email")) {
         const email = body.email ? String(body.email).trim() : null;
         await sql`UPDATE users SET email=${email}, updated_at=now() WHERE id=${id}`;
+      }
+      if (Object.prototype.hasOwnProperty.call(body, "allclients")) {
+        await sql`UPDATE users SET allclients=${!!body.allclients}, updated_at=now() WHERE id=${id}`;
       }
       res.status(200).json({ ok: true });
       return;

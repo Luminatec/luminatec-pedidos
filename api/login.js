@@ -27,7 +27,8 @@ export default async function handler(req, res) {
     if (!ok) return bad();
 
     const mc = !!user.must_change;
-    const token = signToken({ uid: Number(user.id), role: user.role, vn: user.name, mc }, secret);
+    const ac = !!user.allclients;
+    const token = signToken({ uid: Number(user.id), role: user.role, vn: user.name, mc, ac }, secret);
     res.status(200).json({
       ok: true,
       token,
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
       role: user.role,
       name: user.name,
       vid: Number(user.id),
+      allClients: ac,
     });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
