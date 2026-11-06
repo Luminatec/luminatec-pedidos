@@ -55,7 +55,13 @@ export async function odooUid() {
 export async function odooExec(model, method, args = [], kwargs = {}) {
   const { ODOO_DB, ODOO_API_KEY } = process.env;
   const uid = await odooUid();
-  return odooCall("object", "execute_kw", [ODOO_DB, uid, ODOO_API_KEY, model, method, args, kwargs]);
+  // Forzamos el idioma a es_AR (configurable) para que la app lea y resuelva los
+  // nombres EN EL MISMO IDIOMA que ve el usuario en Odoo y en el PDF. Si no, la app
+  // leería la capa "fuente" del nombre traducible y Odoo mostraría la traducción es_AR,
+  // y ante cualquier traducción distinta (p.ej. un plazo mal traducido) habría desacuerdo.
+  const lang = process.env.ODOO_LANG || "es_AR";
+  const kw = { ...kwargs, context: { lang, ...(kwargs.context || {}) } };
+  return odooCall("object", "execute_kw", [ODOO_DB, uid, ODOO_API_KEY, model, method, args, kw]);
 }
 
 export function readBody(req) {
