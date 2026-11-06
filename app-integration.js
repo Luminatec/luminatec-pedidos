@@ -473,7 +473,10 @@
       }
       const note = body.querySelector(".nota-hint, .muted-note") ||
         [...body.querySelectorAll("div,p")].find((n) => /activan en la fase conectada|requiere servidor|próxima fase/i.test(n.textContent || ""));
-      if (note) note.textContent = "El pedido se envía por mail y se carga en Odoo como borrador. Sin conexión queda en pendientes.";
+      if (note && !note.dataset.lumiNote) {
+        note.dataset.lumiNote = "1";
+        note.textContent = "El pedido se envía por mail y se carga en Odoo como borrador. Sin conexión queda en pendientes.";
+      }
     });
     obs.observe(body, { childList: true, subtree: true });
   }
