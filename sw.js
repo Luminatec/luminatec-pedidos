@@ -1,5 +1,6 @@
-// Service worker: cachea el app shell para que la app abra y funcione sin conexión.
-const CACHE = "lumi-pedidos-v1";
+// Service worker: "red primero" para el shell (app siempre fresca online),
+// con caída a caché cuando no hay conexión. La API nunca se cachea.
+const CACHE = "lumi-pedidos-v2";
 const SHELL = [
   "/",
   "/index.html",
@@ -32,23 +33,19 @@ self.addEventListener("fetch", (e) => {
     return;
   }
 
-  // Navegación: red primero, cae al index cacheado si no hay conexión.
-  if (req.mode === "navigate") {
-    e.respondWith(fetch(req).catch(() => caches.match("/index.html")));
-    return;
-  }
-
-  // Resto (shell/estáticos): cache primero, con actualización en segundo plano.
+  // Resto (shell/estáticos y navegación): red primero, con actualización de caché.
+  // Si no hay conexión, se sirve lo cacheado (y el index para navegación).
   e.respondWith(
-    caches.match(req).then((cached) => {
-      const net = fetch(req).then((res) => {
+    fetch(req)
+      .then((res) => {
         if (res && res.status === 200 && req.method === "GET") {
           const copy = res.clone();
           caches.open(CACHE).then((c) => c.put(req, copy));
         }
         return res;
-      }).catch(() => cached);
-      return cached || net;
-    })
+      })
+      .catch(() =>
+        caches.match(req).then((cached) => cached || (req.mode === "navigate" ? caches.match("/index.html") : undefined))
+      )
   );
 });
